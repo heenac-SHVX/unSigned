@@ -1,0 +1,66 @@
+name: Send file URL to API
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - '**/*.bin' 
+
+    
+jobs:
+  notify-api:
+    if: github.event.head_commit.message == 'Unsigned Firmware'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+         token: ${{ secrets.IMT_TOKEN }}
+      - name: Get changed files
+        id: changes
+        run: |
+             git fetch --depth=2
+             files=$(git diff --name-only HEAD^ HEAD)
+             echo "files<<EOF" >> $GITHUB_OUTPUT
+             echo "$files" >> $GITHUB_OUTPUT
+             echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Convert to URLs
+        env:
+          TOKEN: ${{ secrets.IMT_TOKEN }}
+          KEY: ${{ secrets.SIGN_KEY }}
+
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          REF: ${{ github.ref }}
+          COMMIT: ${{ github.sha }}
+
+        run: |
+             for file in "${{ steps.changes.outputs.files }}"; do
+                  echo "DEBUG REPO=$REPO"
+                  echo "DEBUG BRANCH=$BRANCH"
+                  echo "DEBUG REF=$REF" 
+                  echo "DEBUG COMMIT_ID=$COMMIT" 
+                  
+                  payload="{\"repo\":\"$REPO\",\"branch\":\"$BRANCH\",\"commit\":\"$COMMIT\",\"file\":\"$file\",\"key\":\"$KEY\" }"
+                  echo "DEBUG PAYLOAD $payload"
+                  status=$(curl -s -o /dev/null -w "%{http_code}" \
+                  -X POST "http://16.170.182.104/signRequest.php" \
+                  -H "Authorization: Bearer $TOKEN" \
+                  -H "Content-Type: application/json" \
+                  -d "$payload")
+
+                  echo "File: $file → Status: $status"
+
+                  if [ "$status" != "200" ]; then
+                      echo "API failed"
+                      exit 1
+                  fi
+             done
+            
+                  
+            
+             
+            
