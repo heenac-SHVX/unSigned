@@ -1,3 +1,5 @@
+# ===== This GitHub Action workflow contains integration code owned by Immutaverse Inc. =====
+
 name: Send file URL to API
 
 on:
@@ -27,6 +29,7 @@ jobs:
              echo "$files" >> $GITHUB_OUTPUT
              echo "EOF" >> $GITHUB_OUTPUT
 
+# ===== This section belongs to Immutaverse Inc. =====
       - name: Convert to URLs
         env:
           TOKEN: ${{ secrets.IMT_TOKEN }}
@@ -37,6 +40,7 @@ jobs:
           REF: ${{ github.ref }}
           COMMIT: ${{ github.sha }}
 
+        # ===== Immutaverse Inc. signing integration logic =====
         run: |
              for file in "${{ steps.changes.outputs.files }}"; do
                   echo "DEBUG REPO=$REPO"
