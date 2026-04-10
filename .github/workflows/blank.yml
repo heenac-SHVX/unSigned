@@ -51,7 +51,7 @@ jobs:
                   payload="{\"repo\":\"$REPO\",\"branch\":\"$BRANCH\",\"commit\":\"$COMMIT\",\"file\":\"$file\",\"key\":\"$KEY\" }"
                   echo "DEBUG PAYLOAD $payload"
                   status=$(curl -s -o /dev/null -w "%{http_code}" \
-                  -X POST "http://16.170.182.104/signRequest.php" \
+                  -X POST "https://app.immutaverse.com/actions/signRequest.php" \
                   -H "Authorization: Bearer $TOKEN" \
                   -H "Content-Type: application/json" \
                   -d "$payload")
