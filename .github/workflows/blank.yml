@@ -1,70 +1,74 @@
 # ===== This GitHub Action workflow contains integration code owned by Immutaverse Inc. =====
-
 name: Send file URL to API
-
 on:
   push:
     branches: [ "main" ]
     paths:
-      - '**/*.bin' 
+      - '**/*.bin'
 
-    
 jobs:
   notify-api:
     if: github.event.head_commit.message == 'Unsigned Firmware'
-
     runs-on: ubuntu-latest
-
+    env:
+      ACTION_VERSION: "1.0.0"
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-         token: ${{ secrets.IMT_TOKEN }}
+          token: ${{ secrets.IMT_TOKEN }}
+
       - name: Get changed files
         id: changes
         run: |
-             git fetch --depth=2
-             files=$(git diff --name-only HEAD^ HEAD)
-             echo "files<<EOF" >> $GITHUB_OUTPUT
-             echo "$files" >> $GITHUB_OUTPUT
-             echo "EOF" >> $GITHUB_OUTPUT
+          git fetch --depth=2
+          files=$(git diff --name-only HEAD^ HEAD)
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$files" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-# ===== This section belongs to Immutaverse Inc. =====
-      - name: Convert to URLs
+      # ===== Immutaverse Inc. signing integration logic =====
+      - name: Send files for signing
         env:
           TOKEN: ${{ secrets.IMT_TOKEN }}
           KEY: ${{ secrets.SIGN_KEY }}
-
           REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
           REF: ${{ github.ref }}
           COMMIT: ${{ github.sha }}
-
-        # ===== Immutaverse Inc. signing integration logic =====
         run: |
-             for file in "${{ steps.changes.outputs.files }}"; do
-                  echo "DEBUG REPO=$REPO"
-                  echo "DEBUG BRANCH=$BRANCH"
-                  echo "DEBUG REF=$REF" 
-                  echo "DEBUG COMMIT_ID=$COMMIT" 
-                  
-                  payload="{\"repo\":\"$REPO\",\"branch\":\"$BRANCH\",\"commit\":\"$COMMIT\",\"file\":\"$file\",\"key\":\"$KEY\" }"
-                  echo "DEBUG PAYLOAD $payload"
-                  status=$(curl -s -o /dev/null -w "%{http_code}" \
-                  -X POST "https://app.immutaverse.com/actions/signRequest.php" \
-                  -H "Authorization: Bearer $TOKEN" \
-                  -H "Content-Type: application/json" \
-                  -d "$payload")
+          for file in "${{ steps.changes.outputs.files }}"; do
+            echo "DEBUG REPO=$REPO"
+            echo "DEBUG BRANCH=$BRANCH"
+            echo "DEBUG REF=$REF"
+            echo "DEBUG COMMIT_ID=$COMMIT"
 
-                  echo "File: $file → Status: $status"
+            payload="{\"repo\":\"$REPO\",\"branch\":\"$BRANCH\",\"commit\":\"$COMMIT\",\"file\":\"$file\",\"key\":\"$KEY\",\"action_version\":\"$ACTION_VERSION\"}"
+            echo "DEBUG PAYLOAD $payload"
 
-                  if [ "$status" != "200" ]; then
-                      echo "API failed"
-                      exit 1
-                  fi
-             done
-            
-                  
-            
-             
-            
+            response=$(curl -s -w "\n%{http_code}" \
+              -X POST "https://app.immutaverse.com/actions/signRequest.php" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$payload")
+
+            http_code=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
+
+            echo "File: $file → Status: $http_code"
+            echo "Response: $body"
+
+            if [ "$http_code" != "200" ]; then
+              error_msg=$(echo "$body" | jq -r '.message // "API failed"')
+              error_code=$(echo "$body" | jq -r '.error_code // empty')
+
+              if [ "$error_code" = "VERSION_MISMATCH" ]; then
+                echo "::error::Action version mismatch. Please update your workflow to the latest version from the Immutaverse GitHub repo."
+              elif [ "$error_code" = "SUBSCRIPTION_INACTIVE" ]; then
+                echo "::error::Your Immutaverse subscription is not active. Please check your billing at app.immutaverse.com."
+              else
+                echo "::error::$error_msg"
+              fi
+              exit 1
+            fi
+          done
