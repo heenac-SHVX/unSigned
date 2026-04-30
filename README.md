@@ -1,176 +1,220 @@
-<img width="2500" height="351" alt="Immutaverse+Blue+White+Logo" src="https://github.com/user-attachments/assets/f8929d7f-94a1-43bf-b73f-29aff0fc3756" />
+# Immutaverse Firmware Signing
 
-# Immutaverse Firmware Signing — Setup Guide
+![Immutaverse Blue White Logo](https://github.com/user-attachments/assets/f8929d7f-94a1-43bf-b73f-29aff0fc3756)
 
-If you can read this, Immutaverse has granted you collaborator access to this repository. This guide will walk you through everything you need to set up firmware signing for your repository.
+![GitHub Marketplace](https://img.shields.io/badge/GitHub-Marketplace-blue?logo=github)
+![Version](https://img.shields.io/github/v/release/adishvx/unSigned)
+![License](https://img.shields.io/github/license/adishvx/unSigned)
 
-Once everything is set up, the process is simple: you commit a `.bin` firmware file with a specific commit message, and the signed firmware is automatically pushed back to your repository.
+Securely sign firmware binaries directly from GitHub Actions using the Immutaverse Firmware Signing Action.
 
 ---
 
-## Before You Start
+# Overview
+
+The Immutaverse Firmware Signing Action allows you to automatically sign firmware binaries (`.bin`) directly inside GitHub Actions workflows.
+
+This action is designed for embedded developers, IoT pipelines, firmware release automation, and secure software delivery.
+
+---
+
+# Before You Begin
 
 Make sure you have the following ready:
 
 - **OpenSSL** installed on your local machine
-  - Linux / macOS: usually pre-installed. Verify by running `openssl version` in your terminal
+  - Linux / macOS: usually pre-installed. Verify by running `openssl version`
   - Windows: install via [Git for Windows](https://gitforwindows.org/)
-- Your **own GitHub repository** where you will commit firmware files and receive signed firmware back
+- Your **own GitHub repository** where firmware files will be uploaded and signed firmware will be returned
 
 ---
 
-## Step 1 — Add the Workflow File
 
-The workflow file is already available in this repository. Here is how to copy it into your own repository:
+# Setup Guide
 
-1. In this repository, navigate to `.github/workflows/blank.yml` — or open it directly [here](https://github.com/immutaverse/Firmware-Signing/blob/main/.github/workflows/blank.yml)
-2. Click the **Copy raw file** button (top-right of the file view) to copy the entire contents
+## Step 1 — Create the Workflow
 
-Now add it to your own repository:
+Create the following file inside your repository:
 
-3. Go to your repository and click the **Actions** tab
-4. Click **New workflow**
-5. Click **"Set up a workflow yourself"** (top-right link)
-6. Delete all the placeholder content in the editor
-7. Paste the contents you copied
-8. Name the file `firmware-signing.yml`
-9. Click **Commit changes**
-
-The file is now saved under `.github/workflows/` in your repository — GitHub handles this location automatically when you create it through the Actions UI.
-
----
-
-## Step 2 — Generate Your Signing Keys
-
-You need to generate a private signing key, encrypt it, and share the encryption details with Immutaverse. Run the following commands in your terminal:
-
-```bash
-# Generate RSA private key
-openssl genrsa -out signing_key.pem 3072
-
-# Generate a random AES encryption key and IV
-AES=$(openssl rand -hex 32)
-IV=$(openssl rand -hex 16)
-
-# Save the AES key and IV to files
-echo "$AES" > aes.key
-echo "$IV" > iv.key
-
-# Encrypt the private key using AES-256-CBC
-openssl enc -aes-256-cbc \
-  -in signing_key.pem \
-  -out output.enc \
-  -K "$AES" \
-  -iv "$IV"
-
-# Base64-encode the encrypted key
-base64 -w0 output.enc > encrypted_signing_key
+```text
+.github/workflows/firmware-signing.yml
 ```
 
-Once the commands finish, you will have these files:
+Paste the following workflow:
 
-| File | What to do with it |
-|---|---|
-| `signing_key.pem` | **Keep this private. Never share or commit it.** Store it securely offline. |
-| `aes.key` | **Send to Immutaverse** via email or the agreed channel |
-| `iv.key` | **Send to Immutaverse** via email or the agreed channel |
-| `encrypted_signing_key` | **You will use this as your `SIGN_KEY` secret in Step 3** |
+```yaml
+name: Sign Firmware
 
-> Immutaverse uses `aes.key` and `iv.key` to decrypt your signing key when processing firmware. Without these, signing cannot proceed.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.bin'
 
----
+jobs:
+  sign:
+    if: github.event.head_commit.message == 'Unsigned Firmware'
+    runs-on: ubuntu-latest
 
-## Step 3 — Add Secrets to Your Repository
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-Your repository needs two secrets configured so the workflow can authenticate and sign firmware securely.
-
-To add a secret, go to your repository on GitHub and navigate to:
-**Settings → Secrets and variables → Actions → New repository secret**
-
----
-
-### Secret 1: `IMT_TOKEN`
-
-This is your own GitHub Personal Access Token (PAT). It allows the workflow to read your firmware file and push the signed firmware back to your repository.
-
-**How to create your PAT:**
-
-1. Click your profile picture (top-right on GitHub) → **Settings**
-2. Scroll to the bottom of the left sidebar → click **Developer settings**
-3. Click **Personal access tokens** → **Fine-grained tokens**
-4. Click **Generate new token**
-5. Enter a name such as `IMT_TOKEN`
-6. Under **Repository access**, select **Only select repositories**, then use the dropdown to select your repository
-7. Under **Permissions**, click **Add permissions**, search for **`contents`**, and set access to **Read and write**
-8. Click **Generate token**
-9. **Copy the token immediately** — GitHub will not show it again
-
-Now add it as a secret:
-- **Name:** `IMT_TOKEN`
-- **Value:** The token you just copied
-
----
-
-### Secret 2: `SIGN_KEY`
-
-This is the encrypted signing key you generated in Step 2.
-
-To get the value, open the `encrypted_signing_key` file in a text editor, or run the following in your terminal:
-
-```bash
-cat encrypted_signing_key
-```
-
-Copy the entire output, then add it as a secret:
-- **Name:** `SIGN_KEY`
-- **Value:** The contents of the `encrypted_signing_key` file
-
----
-
-### Adding Both Secrets to Your Repository
-
-Now that you have both values ready, add them to your repository:
-
-1. Go to your repository on GitHub
-2. Click **Settings** in the top navigation bar
-3. In the left sidebar, click **Secrets and variables**
-4. Click **Actions**
-5. Scroll down until you find the **Repository secrets** section
-6. Click **New repository secret**
-7. Enter `IMT_TOKEN` as the name and paste your Personal Access Token as the value, then click **Add secret**
-8. Click **New repository secret** again
-9. Enter `SIGN_KEY` as the name and paste the contents of your `encrypted_signing_key` file as the value, then click **Add secret**
-
----
-
-## Step 4 — Sign Your Firmware
-
-Your setup is now complete. Every time you want to sign a firmware file, follow these steps:
-
-1. Go to your repository on GitHub and navigate to the folder where you want to upload your firmware
-2. Click **Add file** → **Upload files**
-3. Drag and drop your `.bin` firmware file, or click **Choose your files** to select it
-4. In the **Commit changes** section, enter the commit message **exactly** as shown:
-
-   `Unsigned Firmware`
-
-   > The commit message must be exactly `Unsigned Firmware`. Any variation will prevent the workflow from triggering.
-
-5. Click **Commit changes**
-6. Go to the **Actions** tab in your repository — you will see the workflow running
-7. Once the workflow completes, reload the page — the signed firmware will appear in the same folder with `signed_` added to the beginning of the filename
-
-**Example:**
-```
-your_firmware.bin   →   signed_your_firmware.bin
+      - name: Firmware Signing Action
+        uses: adishvx/unSigned@<LATEST_VERSION>
+        with:
+          imt-token: ${{ secrets.IMT_TOKEN }}
+          sign-key: ${{ secrets.SIGN_KEY }}
 ```
 
 ---
 
-## Important Notes
+# Repository Secrets
 
-- The firmware file must have a **`.bin`** extension
-- The push must be to the **`main`** branch
-- The commit message must be **exactly** `Unsigned Firmware` — any variation will be ignored
-- `aes.key` and `iv.key` must be shared with Immutaverse before your first signing run
-- Never commit `signing_key.pem` to any repository — store it securely offline
+Your repository requires two GitHub Actions secrets.
+
+Navigate to:
+
+```text
+Repository → Settings → Secrets and variables → Actions
+```
+
+---
+
+## Secret 1 — IMT_TOKEN
+
+A GitHub Fine-grained Personal Access Token (PAT) is required to:
+
+- Read firmware files
+- Push signed firmware back to the repository
+- Authenticate with Immutaverse services
+
+### Create a GitHub PAT
+
+1. Open GitHub Settings
+2. Go to **Developer settings**
+3. Open **Personal access tokens**
+4. Select **Fine-grained tokens**
+5. Click **Generate new token**
+6. Name the token:
+
+```text
+IMT_TOKEN
+```
+
+7. Under **Repository access**, select:
+
+```text
+Only select repositories
+```
+
+8. Choose your repository
+9. Under **Repository permissions**, enable:
+
+| Permission | Access |
+|------------|--------|
+| Contents | Read and write |
+
+10. Under **Account permissions**, enable:
+
+| Permission | Access |
+|------------|--------|
+| Email addresses | Read-only |
+
+11. Generate the token
+12. Copy the token immediately
+
+GitHub will not display it again.
+
+### Add IMT_TOKEN Secret
+
+1. Open Repository Settings
+2. Go to **Secrets and variables → Actions**
+3. Click **New repository secret**
+4. Name it:
+
+```text
+IMT_TOKEN
+```
+
+5. Paste your PAT value
+6. Click **Add secret**
+
+---
+
+## Secret 2 — SIGN_KEY
+
+This is your private Immutaverse firmware signing key.
+
+### Add SIGN_KEY Secret
+
+1. Open Repository Settings
+2. Go to **Secrets and variables → Actions**
+3. Click **New repository secret**
+4. Name it:
+
+```text
+SIGN_KEY
+```
+
+5. Paste your signing key
+6. Click **Add secret**
+
+---
+
+# Sign Firmware
+
+Once setup is complete:
+
+1. Open your GitHub repository
+2. Upload a firmware `.bin` file
+3. Use the following commit message exactly:
+
+```text
+Unsigned Firmware
+```
+
+4. Commit the upload
+5. Open the **Actions** tab
+6. Wait for workflow completion
+7. Refresh the repository folder
+
+The signed firmware will appear automatically.
+
+### Example
+
+```text
+firmware.bin
+↓
+signed_firmware.bin
+```
+
+---
+
+# Important Requirements
+
+- Firmware files must use the `.bin` extension
+- Workflow only runs on the `main` branch
+- Commit message must exactly match:
+
+```text
+Unsigned Firmware
+```
+
+---
+
+
+# Support
+
+For signing issues, licensing, or subscription inquiries, visit:
+
+https://immutaverse.com
+
+---
+
+# License
+
+Copyright © Immutaverse Inc.
+
+This software is proprietary. Unauthorized redistribution, modification, or resale is prohibited.
