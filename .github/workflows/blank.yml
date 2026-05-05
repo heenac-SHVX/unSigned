@@ -18,7 +18,8 @@ jobs:
       # ---------------------------------
 
       - name: Firmware signin action
-        uses: adishvx/unSigned@1.0.1
+        uses: immutaverse/Firmware-Signing@1.0.0
+        # uses: adishvx/unSigned@1.0.1
         # uses: apandey159/unsigned@1.0.0
         with:
           imt-token: ${{ secrets.IMT_TOKEN }}
